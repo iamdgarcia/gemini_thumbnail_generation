@@ -1,0 +1,5 @@
+{
+  "name": "AI Thumbnail Generator",
+  "description": "Generate highly engaging YouTube thumbnails by providing a face, a title, and a subtitle. The app uses AI to create a background concept, add an expression to the face, and compose the final image.",
+  "requestFramePermissions": []
+}
