@@ -15,6 +15,7 @@ export const generateThumbnail = async (
     faceImage: { base64: string; mimeType: string },
     title: string,
     subtitle: string,
+    expressionMode: string,
     aspectRatio: string,
     colorPalette: { name: string; colors: string[] } | null,
     setLoadingMessage: (message: string) => void
@@ -25,6 +26,10 @@ export const generateThumbnail = async (
         ? `The design must heavily feature a ${colorPalette.name} color palette. The key colors to use are: ${colorPalette.colors.join(', ')}.`
         : "The design should have a visually appealing and appropriate color palette chosen by you to maximize engagement.";
     
+    const expressionInstruction = expressionMode === 'Auto'
+        ? "The expression should be exaggerated, highly engaging, and perfectly match the emotional tone of the title/subtitle."
+        : `The facial expression MUST strictly be "${expressionMode}". Describe a detailed, exaggerated, and highly engaging "${expressionMode}" look that fits the style of a YouTube thumbnail.`;
+
     // Step 1: Generate creative prompts for background, expression, and clickbait text
     setLoadingMessage("1/4: Brainstorming thumbnail ideas...");
     const promptGenResponse = await ai.models.generateContent({
@@ -32,8 +37,10 @@ export const generateThumbnail = async (
         contents: `You are an expert YouTube thumbnail designer. For a video titled "${title}" with subtitle "${subtitle}", I need to create a click-worthy thumbnail. 
 ${paletteInstruction}
 1. Create a detailed, descriptive prompt for an AI image generator to create the background scene. This background should be visually interesting, relevant to the title, and use the specified color guidance.
-2. Create a concise prompt describing a facial expression for a person that would be overlaid on this background. The expression should be exaggerated and highly engaging.
+2. Create a concise prompt describing a facial expression for a person that would be overlaid on this background. ${expressionInstruction}
 3. Generate a very short, punchy, clickbait text (2-4 words MAX) derived from the title that could be overlaid on the thumbnail. Avoid generic phrases.
+IMPORTANT: Detect the language of the video title. The 'clickbait_text' MUST be in the same language as the video title (e.g. if title is Spanish, text must be Spanish). However, keep 'background_prompt' and 'expression_prompt' in English for best image generation results.
+
 Respond ONLY with a valid JSON object with keys "background_prompt", "expression_prompt", and "clickbait_text". For example: {"background_prompt": "A mysterious, ancient jungle temple...", "expression_prompt": "A look of pure terror, eyes wide, screaming silently", "clickbait_text": "IT'S REAL?!"}`,
         config: {
             responseMimeType: "application/json",
@@ -42,15 +49,15 @@ Respond ONLY with a valid JSON object with keys "background_prompt", "expression
                 properties: {
                     background_prompt: {
                         type: Type.STRING,
-                        description: "A detailed prompt for generating the background image."
+                        description: "A detailed prompt for generating the background image. Must be in English."
                     },
                     expression_prompt: {
                         type: Type.STRING,
-                        description: "A prompt for modifying a face to have an engaging expression."
+                        description: "A prompt for modifying a face to have an engaging expression. Must be in English."
                     },
                     clickbait_text: {
                         type: Type.STRING,
-                        description: "Short, punchy clickbait text for the thumbnail (2-4 words)."
+                        description: "Short, punchy clickbait text for the thumbnail (2-4 words). Must match the language of the title."
                     }
                 },
                 required: ["background_prompt", "expression_prompt", "clickbait_text"]

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import type { ImageFile } from './types';
 import { fileToBase64 } from './utils/fileUtils';
 import { generateThumbnail } from './services/geminiService';
@@ -12,6 +12,18 @@ const UploadIcon: React.FC<{className?: string}> = ({ className }) => (
 const SparklesIcon: React.FC<{className?: string}> = ({ className }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-6 h-6"}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" />
+    </svg>
+);
+
+const DownloadIcon: React.FC<{className?: string}> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-6 h-6"}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75V16.5M12 3v13.5M8.25 12.75 12 16.5l3.75-3.75" />
+    </svg>
+);
+
+const ChevronDownIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-6 h-6"}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="m19.5 8.25-7.5 7.5-7.5-7.5" />
     </svg>
 );
 
@@ -111,19 +123,65 @@ const TextInput: React.FC<TextInputProps> = ({ label, value, onChange, placehold
     );
 };
 
-const AspectRatioIcon: React.FC<{ ratio: string; isActive: boolean }> = ({ ratio, isActive }) => {
-    const styles: { [key: string]: React.CSSProperties } = {
-        '16:9': { width: '24px', height: '13.5px' },
-        '9:16': { width: '13.5px', height: '24px' },
-        '4:3': { width: '24px', height: '18px' },
-        '1:1': { width: '20px', height: '20px' },
-    };
+interface DropdownProps<T> {
+    label: string;
+    options: T[];
+    selected: T;
+    onSelect: (item: T) => void;
+    renderOption: (item: T) => React.ReactNode;
+    keyExtractor: (item: T) => string | number;
+}
 
-    const bgColor = isActive ? 'bg-white' : 'bg-gray-400 group-hover:bg-gray-200';
+const Dropdown = <T,>({ label, options, selected, onSelect, renderOption, keyExtractor }: DropdownProps<T>) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, []);
 
     return (
-        <div className="w-10 h-8 flex justify-center items-center mr-2">
-            <div style={styles[ratio]} className={`${bgColor} transition-colors duration-200 rounded-sm`}></div>
+        <div className="w-full relative" ref={containerRef}>
+            <label className="block text-sm font-medium text-gray-300 mb-2">{label}</label>
+            <button
+                type="button"
+                onClick={() => setIsOpen(!isOpen)}
+                className="w-full px-4 py-2 bg-gray-800 border border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-left flex justify-between items-center"
+            >
+                <div className="flex-1 truncate">
+                    {renderOption(selected)}
+                </div>
+                <ChevronDownIcon className={`w-5 h-5 text-gray-400 transition-transform duration-200 ${isOpen ? 'transform rotate-180' : ''}`} />
+            </button>
+
+            {isOpen && (
+                <div className="absolute z-20 mt-1 w-full bg-gray-800 border border-gray-600 rounded-md shadow-lg max-h-60 overflow-auto focus:outline-none py-1">
+                    {options.map((option) => {
+                        const isSelected = keyExtractor(selected) === keyExtractor(option);
+                        return (
+                            <div
+                                key={keyExtractor(option)}
+                                onClick={() => {
+                                    onSelect(option);
+                                    setIsOpen(false);
+                                }}
+                                className={`cursor-pointer select-none relative py-2 pl-4 pr-4 hover:bg-gray-700 ${isSelected ? 'bg-gray-700/50 text-white font-medium' : 'text-gray-300'}`}
+                            >
+                                {renderOption(option)}
+                            </div>
+                        );
+                    })}
+                </div>
+            )}
         </div>
     );
 };
@@ -152,13 +210,16 @@ const palettes: Palette[] = [
     { name: 'Sunset', colors: ['#F65B49', '#F9A825', '#FFD54F', '#4A148C'] }
 ];
 
+const autoPalette: Palette = { name: 'Auto', colors: [] };
+const expressionOptions = ['Auto', 'Shocked', 'Excited', 'Angry', 'Fearful', 'Sad', 'Serious', 'Confused'];
 
 export default function App() {
     const [faceImage, setFaceImage] = useState<ImageFile | null>(null);
     const [title, setTitle] = useState('');
     const [subtitle, setSubtitle] = useState('');
+    const [expression, setExpression] = useState('Auto');
     const [aspectRatio, setAspectRatio] = useState('16:9');
-    const [colorPalette, setColorPalette] = useState<Palette | null>(null);
+    const [colorPalette, setColorPalette] = useState<Palette>(autoPalette);
 
     const [isLoading, setIsLoading] = useState(false);
     const [loadingMessage, setLoadingMessage] = useState('');
@@ -184,8 +245,9 @@ export default function App() {
                 { base64: faceImage.base64, mimeType: faceImage.mimeType },
                 title,
                 subtitle,
+                expression,
                 aspectRatio,
-                colorPalette,
+                colorPalette.name === 'Auto' ? null : colorPalette,
                 setLoadingMessage
             );
             setGeneratedThumbnail(resultUrl);
@@ -198,6 +260,17 @@ export default function App() {
         }
     };
     
+    const handleDownload = () => {
+        if (generatedThumbnail) {
+            const link = document.createElement('a');
+            link.href = generatedThumbnail;
+            link.download = `thumbnail-${Date.now()}.png`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    };
+
     const canSubmit = faceImage && title && !isLoading;
 
     const aspectRatioOptions = [
@@ -207,8 +280,16 @@ export default function App() {
         { value: '1:1', label: 'Square' },
     ];
 
+    const allPalettes = [autoPalette, ...palettes];
+
     return (
         <div className="min-h-screen bg-gray-900 text-white font-sans">
+             <style>{`
+                @keyframes popIn {
+                    0% { opacity: 0; transform: scale(0.95) translateY(10px); filter: blur(4px); }
+                    100% { opacity: 1; transform: scale(1) translateY(0); filter: blur(0); }
+                }
+            `}</style>
             <main className="container mx-auto px-4 py-8">
                 <header className="text-center mb-12">
                     <h1 className="text-4xl md:text-5xl font-bold tracking-tight bg-gradient-to-r from-blue-400 to-purple-500 text-transparent bg-clip-text">
@@ -227,62 +308,48 @@ export default function App() {
                         <TextInput label="Title" step="2" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g., I Tried to Survive 100 Days..." />
                         <TextInput label="Subtitle (Optional)" step="3" value={subtitle} onChange={(e) => setSubtitle(e.target.value)} placeholder="e.g., ...And This Happened" />
                         
-                        <div className="w-full">
-                            <label className="block text-sm font-medium text-gray-300 mb-2">4. Aspect Ratio</label>
-                             <div className="grid grid-cols-2 gap-2 bg-gray-900/50 p-1 rounded-md">
-                                {aspectRatioOptions.map(({ value, label }) => (
-                                    <button
-                                        key={value}
-                                        onClick={() => setAspectRatio(value)}
-                                        className={`group flex items-center justify-start px-3 py-2 text-sm font-semibold rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-800 text-left ${
-                                            aspectRatio === value
-                                                ? 'bg-blue-600 text-white shadow'
-                                                : 'bg-transparent text-gray-400 hover:bg-gray-700/50'
-                                        }`}
-                                    >
-                                        <AspectRatioIcon ratio={value} isActive={aspectRatio === value} />
-                                        <div className="flex flex-col leading-tight">
-                                            <span className="font-bold">{value}</span>
-                                            <span className="text-xs opacity-80">{label}</span>
-                                        </div>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
+                        <Dropdown 
+                            label="4. Facial Expression"
+                            options={expressionOptions}
+                            selected={expression}
+                            onSelect={(opt) => setExpression(opt)}
+                            keyExtractor={(opt) => opt}
+                            renderOption={(opt) => (
+                                <span className="font-medium">{opt}</span>
+                            )}
+                        />
 
-                        <div className="w-full">
-                            <label className="block text-sm font-medium text-gray-300 mb-2">5. Color Palette (Optional)</label>
-                             <div className="grid grid-cols-2 lg:grid-cols-3 gap-2">
-                                <button
-                                    onClick={() => setColorPalette(null)}
-                                    className={`col-span-1 flex items-center justify-center p-2 text-sm font-semibold rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 ${
-                                        colorPalette === null
-                                            ? 'bg-blue-600 text-white shadow ring-2 ring-blue-500'
-                                            : 'bg-gray-700/50 text-gray-300 hover:bg-gray-700'
-                                    }`}
-                                >
-                                   Auto
-                                </button>
-                                {palettes.map((palette) => (
-                                    <button
-                                        key={palette.name}
-                                        onClick={() => setColorPalette(palette)}
-                                        className={`col-span-1 flex flex-col items-center justify-center p-2 text-xs font-semibold rounded-md transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-gray-800 ${
-                                            colorPalette?.name === palette.name
-                                                ? 'ring-2 ring-blue-500'
-                                                : 'ring-1 ring-transparent hover:ring-blue-600'
-                                        }`}
-                                    >
-                                        <div className="flex space-x-1 mb-1">
-                                            {palette.colors.map(color => (
-                                                <div key={color} className="w-3 h-3 rounded-full" style={{ backgroundColor: color }}></div>
-                                            ))}
-                                        </div>
-                                        <span className={colorPalette?.name === palette.name ? 'text-white' : 'text-gray-400'}>{palette.name}</span>
-                                    </button>
-                                ))}
-                            </div>
-                        </div>
+                        <Dropdown 
+                            label="5. Aspect Ratio"
+                            options={aspectRatioOptions}
+                            selected={aspectRatioOptions.find(opt => opt.value === aspectRatio) || aspectRatioOptions[0]}
+                            onSelect={(opt) => setAspectRatio(opt.value)}
+                            keyExtractor={(opt) => opt.value}
+                            renderOption={(opt) => (
+                                <div className="flex items-center">
+                                    <span className="font-medium mr-2">{opt.value}</span>
+                                    <span className="text-gray-400 text-sm">({opt.label})</span>
+                                </div>
+                            )}
+                        />
+
+                        <Dropdown 
+                            label="6. Color Palette (Optional)"
+                            options={allPalettes}
+                            selected={colorPalette}
+                            onSelect={(p) => setColorPalette(p)}
+                            keyExtractor={(p) => p.name}
+                            renderOption={(palette) => (
+                                <div className="flex items-center justify-between w-full">
+                                    <span className="font-medium">{palette.name}</span>
+                                    <div className="flex space-x-1 ml-2">
+                                        {palette.colors.map(color => (
+                                            <div key={color} className="w-3 h-3 rounded-full ring-1 ring-white/10" style={{ backgroundColor: color }}></div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        />
 
                         <div className="pt-4">
                            <button
@@ -312,29 +379,48 @@ export default function App() {
                         </div>
                     </div>
 
-                    {/* Display Area */}
-                    <div className={`bg-gray-800/50 p-2 rounded-lg shadow-lg border border-gray-700 flex flex-col justify-center items-center transition-all duration-300 ease-in-out ${getAspectRatioClass(aspectRatio)}`}>
-                       {error && (
-                            <div className="text-center text-red-400 p-4">
-                                <h3 className="font-bold text-lg mb-2">Generation Failed</h3>
-                                <p className="text-sm">{error}</p>
-                            </div>
-                        )}
-                        {isLoading && (
-                            <div className="text-center p-4">
-                                <Spinner />
-                                <p className="mt-4 text-lg font-semibold text-gray-300">{loadingMessage}</p>
-                                <p className="text-sm text-gray-500">This may take a moment...</p>
-                            </div>
-                        )}
-                        {!isLoading && !generatedThumbnail && !error && (
-                            <div className="text-center text-gray-500">
-                                <SparklesIcon className="w-16 h-16 mx-auto" />
-                                <p className="mt-4 text-xl">Your generated thumbnail will appear here</p>
-                            </div>
-                        )}
+                    {/* Display Area Wrapper */}
+                    <div className="flex flex-col space-y-4">
+                        {/* Display Area */}
+                        <div className={`bg-gray-800/50 p-2 rounded-lg shadow-lg border border-gray-700 flex flex-col justify-center items-center transition-all duration-300 ease-in-out w-full ${getAspectRatioClass(aspectRatio)}`}>
+                        {error && (
+                                <div className="text-center text-red-400 p-4">
+                                    <h3 className="font-bold text-lg mb-2">Generation Failed</h3>
+                                    <p className="text-sm">{error}</p>
+                                </div>
+                            )}
+                            {isLoading && (
+                                <div className="text-center p-4">
+                                    <Spinner />
+                                    <p className="mt-4 text-lg font-semibold text-gray-300">{loadingMessage}</p>
+                                    <p className="text-sm text-gray-500">This may take a moment...</p>
+                                </div>
+                            )}
+                            {!isLoading && !generatedThumbnail && !error && (
+                                <div className="text-center text-gray-500">
+                                    <SparklesIcon className="w-16 h-16 mx-auto" />
+                                    <p className="mt-4 text-xl">Your generated thumbnail will appear here</p>
+                                </div>
+                            )}
+                            {generatedThumbnail && (
+                                <img 
+                                    src={generatedThumbnail} 
+                                    alt="Generated Thumbnail" 
+                                    className="w-full h-full object-contain rounded-md shadow-2xl ring-1 ring-white/10"
+                                    style={{ animation: 'popIn 0.6s cubic-bezier(0.2, 0.8, 0.2, 1)' }}
+                                />
+                            )}
+                        </div>
+
+                        {/* Download Button */}
                         {generatedThumbnail && (
-                             <img src={generatedThumbnail} alt="Generated Thumbnail" className="w-full h-full object-contain rounded-md" />
+                            <button
+                                onClick={handleDownload}
+                                className="w-full inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-medium rounded-md shadow-sm text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-green-500 focus:ring-offset-gray-900 transition-all duration-200"
+                            >
+                                <DownloadIcon className="w-5 h-5 mr-2" />
+                                Download Thumbnail
+                            </button>
                         )}
                     </div>
                 </div>
