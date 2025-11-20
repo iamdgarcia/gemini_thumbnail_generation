@@ -18,6 +18,7 @@ export const generateThumbnail = async (
     expressionMode: string,
     aspectRatio: string,
     colorPalette: { name: string; colors: string[] } | null,
+    fontStyle: string,
     setLoadingMessage: (message: string) => void
 ): Promise<string> => {
     const ai = getAIClient();
@@ -116,7 +117,7 @@ Respond ONLY with a valid JSON object with keys "background_prompt", "expression
         ? `The final image must be vibrant, high-contrast, and strictly adhere to a ${colorPalette.name} color palette using these main colors: ${colorPalette.colors.join(', ')}. The text "${prompts.clickbait_text}" should use colors from this palette to ensure it is highly visible and pops against the background.`
         : `The final image must be vibrant, high-contrast, and look like a professionally designed, viral YouTube thumbnail.`
 
-    const compositePrompt = `Take the person from the first image (the one with the edited face) and place them prominently on the right side of the second image (the background). Blend them seamlessly. On the left side, add the text "${prompts.clickbait_text}" in a huge, bold, exciting font with a contrasting outline or drop shadow to make it pop. The text and the person should be the main focus. ${paletteCompositeInstruction} The final image must have a ${aspectRatio} aspect ratio. Do not add any other text.`;
+    const compositePrompt = `Take the person from the first image (the one with the edited face) and place them prominently on the right side of the second image (the background). Blend them seamlessly. On the left side, add the text "${prompts.clickbait_text}" using a ${fontStyle} font style. Make sure the text is huge, bold, and exciting with a contrasting outline or drop shadow to make it pop. The text and the person should be the main focus. ${paletteCompositeInstruction} The final image must have a ${aspectRatio} aspect ratio. Do not add any other text.`;
     
     const finalResponse = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
