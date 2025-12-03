@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import type { ImageFile } from './types';
 import { fileToBase64 } from './utils/fileUtils';
@@ -35,6 +34,19 @@ const PhotoIcon: React.FC<{ className?: string }> = ({ className }) => (
         <path strokeLinecap="round" strokeLinejoin="round" d="m2.25 15.75 5.159-5.159a2.25 2.25 0 0 1 3.182 0l5.159 5.159m-1.5-1.5 1.409-1.409a2.25 2.25 0 0 1 3.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 0 0 1.5-1.5V6a1.5 1.5 0 0 0-1.5-1.5H3.75A1.5 1.5 0 0 0 2.25 6v12a1.5 1.5 0 0 0 1.5 1.5Zm10.5-11.25h.008v.008h-.008V8.25Zm.375 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Z" />
     </svg>
 );
+
+const DocumentTextIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-4 h-4"}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+    </svg>
+);
+
+const VideoCameraIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-4 h-4"}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
+    </svg>
+);
+
 
 const Spinner: React.FC = () => (
     <svg className="animate-spin h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -134,7 +146,7 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageUpload, previewUrl
 
 interface TextInputProps {
     label: string;
-    step: string;
+    step?: string;
     value: string;
     onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
     placeholder: string;
@@ -143,7 +155,7 @@ const TextInput: React.FC<TextInputProps> = ({ label, step, value, onChange, pla
     return (
         <div className="w-full">
             <label className="text-sm font-semibold text-gray-300 mb-2 flex items-center">
-                <span className="bg-gray-700 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center mr-2">{step}</span>
+                {step && <span className="bg-gray-700 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center mr-2">{step}</span>}
                 {label}
             </label>
             <div className="relative group">
@@ -160,13 +172,41 @@ const TextInput: React.FC<TextInputProps> = ({ label, step, value, onChange, pla
     );
 };
 
+interface TextAreaProps {
+    label: string;
+    step?: string;
+    value: string;
+    onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
+    placeholder: string;
+}
+const TextArea: React.FC<TextAreaProps> = ({ label, step, value, onChange, placeholder }) => {
+    return (
+        <div className="w-full">
+             <label className="text-sm font-semibold text-gray-300 mb-2 flex items-center">
+                {step && <span className="bg-gray-700 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center mr-2">{step}</span>}
+                {label}
+            </label>
+            <div className="relative group">
+                <textarea
+                    value={value}
+                    onChange={onChange}
+                    placeholder={placeholder}
+                    rows={6}
+                    className="w-full px-4 py-3 bg-gray-900/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all resize-none"
+                />
+                <div className="absolute inset-0 rounded-xl ring-1 ring-white/5 pointer-events-none group-hover:ring-white/10"></div>
+            </div>
+        </div>
+    );
+}
+
 // Modern segmented control for aspect ratio
-const AspectRatioSelector = ({ options, selected, onSelect }: { options: { value: string, label: string }[], selected: string, onSelect: (val: string) => void }) => {
+const SegmentedControl = ({ options, selected, onSelect, label, step }: { options: { value: string, label: string }[], selected: string, onSelect: (val: string) => void, label: string, step: string }) => {
     return (
         <div className="w-full">
             <label className="text-sm font-semibold text-gray-300 mb-2 flex items-center">
-                <span className="bg-gray-700 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center mr-2">5</span>
-                Aspect Ratio
+                <span className="bg-gray-700 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center mr-2">{step}</span>
+                {label}
             </label>
             <div className="grid grid-cols-4 gap-2 p-1 bg-gray-900/50 rounded-xl border border-gray-700">
                 {options.map((opt) => {
@@ -284,6 +324,10 @@ interface Palette {
 }
 
 const palettes: Palette[] = [
+    { name: 'YouTube', colors: ['#FF0000', '#FFFFFF', '#282828'] },
+    { name: 'LinkedIn', colors: ['#0A66C2', '#FFFFFF', '#434649'] },
+    { name: 'Medium', colors: ['#000000', '#FFFFFF', '#A8A8A8'] },
+    { name: 'Substack', colors: ['#FF6719', '#FFFFFF', '#404040'] },
     { name: 'Vibrant', colors: ['#FF3E3E', '#FFC107', '#00D1FF', '#FFFFFF'] },
     { name: 'Neon', colors: ['#39FF14', '#FF40E3', '#00FFFF', '#FDFD96'] },
     { name: 'Pastel', colors: ['#A0E7E5', '#F8C8DC', '#B4F8C8', '#FFAEBC'] },
@@ -296,15 +340,19 @@ const palettes: Palette[] = [
 const autoPalette: Palette = { name: 'Auto', colors: [] };
 const expressionOptions = ['Auto', 'Shocked', 'Excited', 'Angry', 'Fearful', 'Sad', 'Serious', 'Confused', 'Triumphant', 'Suspicious'];
 const fontOptions = ['Bold Sans-Serif', 'Impact Style', 'Handwritten Marker', 'Futuristic', 'Retro', 'Comic/Cartoon', 'Minimalist'];
+const generationStyles = ['Professional', 'Casual', 'Cinematic', '3D Render', 'Comic Book', 'Retro'];
 
 export default function App() {
     const [faceImage, setFaceImage] = useState<ImageFile | null>(null);
+    const [inputMode, setInputMode] = useState<'title' | 'article'>('title');
     const [title, setTitle] = useState('');
     const [subtitle, setSubtitle] = useState('');
+    const [articleText, setArticleText] = useState('');
     const [expression, setExpression] = useState('Auto');
     const [aspectRatio, setAspectRatio] = useState('16:9');
     const [colorPalette, setColorPalette] = useState<Palette>(autoPalette);
     const [fontStyle, setFontStyle] = useState('Bold Sans-Serif');
+    const [generationStyle, setGenerationStyle] = useState('Professional');
 
     const [isLoading, setIsLoading] = useState(false);
     const [loadingMessage, setLoadingMessage] = useState('');
@@ -316,8 +364,10 @@ export default function App() {
     }, []);
 
     const handleSubmit = async () => {
-        if (!faceImage || !title) {
-            setError("Please upload a face image and provide a title.");
+        const hasContent = inputMode === 'title' ? !!title : !!articleText;
+
+        if (!faceImage || !hasContent) {
+            setError("Please upload a face image and provide the video details or article content.");
             return;
         }
 
@@ -328,9 +378,11 @@ export default function App() {
         try {
             const resultUrl = await generateThumbnail(
                 { base64: faceImage.base64, mimeType: faceImage.mimeType },
-                title,
-                subtitle,
+                inputMode === 'title' ? title : '',
+                inputMode === 'title' ? subtitle : '',
+                inputMode === 'article' ? articleText : '',
                 expression,
+                generationStyle,
                 aspectRatio,
                 colorPalette.name === 'Auto' ? null : colorPalette,
                 fontStyle,
@@ -357,7 +409,7 @@ export default function App() {
         }
     };
 
-    const canSubmit = faceImage && title && !isLoading;
+    const canSubmit = faceImage && (inputMode === 'title' ? title : articleText) && !isLoading;
 
     const aspectRatioOptions = [
         { value: '16:9', label: 'Landscape' },
@@ -424,15 +476,44 @@ export default function App() {
                             
                             <ImageUploader onImageUpload={handleImageUpload} previewUrl={faceImage ? URL.createObjectURL(faceImage.file) : undefined} />
                             
-                            <div className="space-y-5">
-                                <TextInput label="Video Title" step="2" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g., I Built a Secret Base..." />
-                                <TextInput label="Subtitle (Optional)" step="3" value={subtitle} onChange={(e) => setSubtitle(e.target.value)} placeholder="e.g., You won't believe this!" />
+                            <div className="space-y-4">
+                                <label className="text-sm font-semibold text-gray-300 flex items-center mb-2">
+                                     <span className="bg-gray-700 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center mr-2">2</span>
+                                     Content Source
+                                </label>
+                                <div className="bg-gray-900/50 p-1 rounded-xl border border-gray-700 grid grid-cols-2 gap-1 mb-4">
+                                    <button
+                                        onClick={() => setInputMode('title')}
+                                        className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${inputMode === 'title' ? 'bg-gray-700 text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}
+                                    >
+                                        <VideoCameraIcon />
+                                        Video Title
+                                    </button>
+                                    <button
+                                        onClick={() => setInputMode('article')}
+                                        className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${inputMode === 'article' ? 'bg-gray-700 text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}
+                                    >
+                                        <DocumentTextIcon />
+                                        Article Text
+                                    </button>
+                                </div>
+
+                                {inputMode === 'title' ? (
+                                    <div className="space-y-5 animate-[popIn_0.3s_ease-out]">
+                                        <TextInput label="Video Title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g., I Built a Secret Base..." />
+                                        <TextInput label="Subtitle (Optional)" value={subtitle} onChange={(e) => setSubtitle(e.target.value)} placeholder="e.g., You won't believe this!" />
+                                    </div>
+                                ) : (
+                                    <div className="animate-[popIn_0.3s_ease-out]">
+                                         <TextArea label="Article Content" value={articleText} onChange={(e) => setArticleText(e.target.value)} placeholder="Paste your article or script here..." />
+                                    </div>
+                                )}
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
                                 <Dropdown 
                                     label="Expression"
-                                    step="4"
+                                    step="3"
                                     options={expressionOptions}
                                     selected={expression}
                                     onSelect={setExpression}
@@ -444,7 +525,7 @@ export default function App() {
                                 
                                 <Dropdown 
                                     label="Font Style"
-                                    step="7" // Visually 7 but placed here for layout
+                                    step="4"
                                     options={fontOptions}
                                     selected={fontStyle}
                                     onSelect={setFontStyle}
@@ -455,31 +536,45 @@ export default function App() {
                                 />
                             </div>
 
-                             <AspectRatioSelector options={aspectRatioOptions} selected={aspectRatio} onSelect={setAspectRatio} />
+                             <SegmentedControl label="Aspect Ratio" step="5" options={aspectRatioOptions} selected={aspectRatio} onSelect={setAspectRatio} />
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                                <Dropdown 
+                                    label="Visual Style"
+                                    step="6"
+                                    options={generationStyles}
+                                    selected={generationStyle}
+                                    onSelect={setGenerationStyle}
+                                    keyExtractor={(opt) => opt}
+                                    renderOption={(opt) => (
+                                        <span className="font-medium">{opt}</span>
+                                    )}
+                                />
 
-                            <Dropdown 
-                                label="Color Palette"
-                                step="6"
-                                options={allPalettes}
-                                selected={colorPalette}
-                                onSelect={setColorPalette}
-                                keyExtractor={(p) => p.name}
-                                renderOption={(palette) => (
-                                    <div className="flex items-center justify-between w-full group">
-                                        <span className="font-medium flex items-center gap-2">
-                                            {palette.name === 'Auto' && <SparklesIcon className="w-4 h-4 text-purple-400" />}
-                                            {palette.name}
-                                        </span>
-                                        {palette.colors.length > 0 && (
-                                            <div className="flex -space-x-2">
-                                                {palette.colors.map((color, i) => (
-                                                    <div key={i} className="w-5 h-5 rounded-full ring-2 ring-gray-800 shadow-sm" style={{ backgroundColor: color }}></div>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                )}
-                            />
+                                <Dropdown 
+                                    label="Color Palette"
+                                    step="7"
+                                    options={allPalettes}
+                                    selected={colorPalette}
+                                    onSelect={setColorPalette}
+                                    keyExtractor={(p) => p.name}
+                                    renderOption={(palette) => (
+                                        <div className="flex items-center justify-between w-full group">
+                                            <span className="font-medium flex items-center gap-2 truncate">
+                                                {palette.name === 'Auto' && <SparklesIcon className="w-4 h-4 text-purple-400" />}
+                                                {palette.name}
+                                            </span>
+                                            {palette.colors.length > 0 && (
+                                                <div className="flex -space-x-2 shrink-0">
+                                                    {palette.colors.slice(0, 3).map((color, i) => (
+                                                        <div key={i} className="w-5 h-5 rounded-full ring-2 ring-gray-800 shadow-sm" style={{ backgroundColor: color }}></div>
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                />
+                            </div>
 
                             <button
                                 onClick={handleSubmit}
