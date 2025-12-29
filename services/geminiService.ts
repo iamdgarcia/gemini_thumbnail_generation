@@ -8,7 +8,12 @@ const getAIClient = () => new GoogleGenAI({ apiKey: process.env.API_KEY });
 interface ThumbnailPrompts {
     visual_description: string;
     clickbait_text: string;
+    suggested_assets: string[];
 }
+
+const cleanJSON = (text: string) => {
+    return text.replace(/^```json\s*/, "").replace(/^```\s*/, "").replace(/```$/, "").trim();
+};
 
 export const generateThumbnail = async (
     faceImage: { base64: string; mimeType: string },
@@ -20,56 +25,59 @@ export const generateThumbnail = async (
     aspectRatio: string,
     colorPalette: { name: string; colors: string[] } | null,
     fontStyle: string,
+    brandAssets: { base64: string; mimeType: string }[],
     setLoadingMessage: (message: string) => void
 ): Promise<string> => {
     const ai = getAIClient();
 
+    // Mapping styles to specific visual keywords
     const stylePromptMap: Record<string, string> = {
-        'Professional': "Studio lighting, clean composition, high production value, sharp focus, professional photography, business-appropriate.",
-        'Casual': "Authentic vlog style, natural lighting, selfie perspective, relatable and raw, spontaneous feel, YouTube personality style.",
-        'Cinematic': "Dramatic lighting, movie poster aesthetic, color graded, teal and orange, 8k resolution, highly detailed background.",
-        '3D Render': "3D animated style, Pixar-like, soft lighting, vibrant colors, cute and stylized proportions, digital art.",
-        'Comic Book': "Comic book art style, bold outlines, cel-shaded, dynamic action lines, vibrant colors, 2D illustration.",
-        'Retro': "90s VHS aesthetic, retro wave, slightly grainy, neon accents, vintage filter, nostalgic feel."
+        'Professional': "Hyper-realistic photography, high-end studio lighting, sharp focus, professional depth of field, 8k resolution, realistic skin texture, clean composition.",
+        'Casual': "Hyper-realistic vlog aesthetic, high-quality smartphone camera look, authentic lighting, natural setting, extremely detailed and lifelike.",
+        'Cinematic': "Hyper-realistic movie scene, anamorphic lens flares, dramatic rim lighting, cinematic color grade, 8k resolution, epic scale, photorealistic textures.",
+        '3D Render': "Hyper-realistic 3D render, ray-tracing, Octane Render style, high-fidelity materials, subsurface scattering, Pixar-like but with realistic lighting.",
+        'Comic Book': "Hyper-realistic comic book illustration, dynamic high-contrast lighting, detailed cel-shading, vibrant hyper-real textures within an illustrative style.",
+        'Retro': "Hyper-realistic vintage aesthetic, 90s film grain, authentic retro lighting, nostalgic atmosphere, high-fidelity details with a vintage filter."
     };
 
     const specificStylePrompt = stylePromptMap[generationStyle] || stylePromptMap['Professional'];
+    
+    // Always emphasize realism
+    const realismRequirement = "The final output must be hyper-realistic, with meticulous attention to detail, lighting, and textures.";
 
     const paletteInstruction = colorPalette
-        ? `The visual style should strictly adhere to a ${colorPalette.name} color palette. Key colors: ${colorPalette.colors.join(', ')}.`
-        : "The visual style should be vibrant, high-contrast, and optimized for high click-through rate.";
+        ? `Adhere strictly to a ${colorPalette.name} color palette (${colorPalette.colors.join(', ')}).`
+        : "Use a vibrant, high-contrast, and visually arresting color palette.";
 
     const expressionInstruction = expressionMode === 'Auto'
-        ? "Choose an exaggerated facial expression that matches the emotional tone of the content."
-        : `The character MUST have a "${expressionMode}" facial expression.`;
+        ? "suggest a high-energy facial expression that matches the content's viral potential"
+        : `show the subject with a clearly defined "${expressionMode}" facial expression`;
 
     const contextInput = articleContent
-        ? `Content Source: Article text:\n"""${articleContent.substring(0, 10000)}"""\nTask: Extract the viral hook.`
-        : `Content Source: Video Title "${title}" and Subtitle "${subtitle}".`;
+        ? `Source Article: """${articleContent.substring(0, 5000)}..."""`
+        : `Main Title: "${title}", Subtitle: "${subtitle}"`;
 
-    const languageInstruction = articleContent
-        ? `IMPORTANT: Detect the primary language of the article. The 'clickbait_text' MUST be in that language.`
-        : `IMPORTANT: Detect the language of the video title. The 'clickbait_text' MUST be in that language (e.g. Spanish title -> Spanish text).`;
-
-    // Step 1: Ideation
-    setLoadingMessage("1/2: Designing concept & animated character...");
+    // Step 1: Ideation - Designing the thumbnail logic
+    setLoadingMessage("1/2: Designing high-engagement concept...");
     
-    const ideationPrompt = `You are an expert YouTube thumbnail designer.
+    const ideationPrompt = `You are a world-class YouTube thumbnail designer for creators like MrBeast. 
 ${contextInput}
+Requested Style: ${generationStyle}.
 ${paletteInstruction}
-Visual Style: ${generationStyle} (${specificStylePrompt}).
 
-Your goal is to design a thumbnail concept that uses the user's face on an animated or stylized body that fits the content theme.
-1. Create a 'visual_description'. This must describe the entire scene, including the background and the main character. 
-   - The character description MUST specify an 'animated body', costume, or specific physical action (e.g. "wearing a space suit", "muscular superhero body", "cartoonish business suit", "body made of fire") that matches the "${generationStyle}" style.
-   - The description should specify the pose and action.
-   - ${expressionInstruction}
-2. Create 'clickbait_text' (2-5 words, very punchy). ${languageInstruction}
+Task: Create a detailed plan for a hyper-realistic thumbnail.
+1. 'visual_description': Describe a dynamic scene. The person in the provided photo (IMAGE 1) is the STAR of this thumbnail. 
+   - Describe their pose, what they are wearing, and the background.
+   - Expression: ${expressionInstruction}.
+   - ${brandAssets.length > 0 ? `Incorporate the ${brandAssets.length} provided brand assets (Logos/Props) naturally.` : ""}
+   - Focus on high-stakes, exciting, or intriguing visual metaphors.
+2. 'overlay_text': 2-5 words of punchy, high-CTR text. Must be in the same language as the input content.
+3. 'suggested_assets': 1-3 specific props to include.
 
-Respond ONLY with valid JSON: {"visual_description": "...", "clickbait_text": "..."}`;
+Respond ONLY with valid JSON: {"visual_description": "...", "overlay_text": "...", "suggested_assets": ["..."]}`;
 
     const promptGenResponse = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-3-flash-preview",
         contents: ideationPrompt,
         config: {
             responseMimeType: "application/json",
@@ -77,47 +85,101 @@ Respond ONLY with valid JSON: {"visual_description": "...", "clickbait_text": ".
                 type: Type.OBJECT,
                 properties: {
                     visual_description: { type: Type.STRING },
-                    clickbait_text: { type: Type.STRING }
+                    overlay_text: { type: Type.STRING },
+                    suggested_assets: { type: Type.ARRAY, items: { type: Type.STRING } }
                 },
-                required: ["visual_description", "clickbait_text"]
+                required: ["visual_description", "overlay_text", "suggested_assets"]
             }
         }
     });
 
-    const prompts: ThumbnailPrompts = JSON.parse(promptGenResponse.text);
+    let prompts: ThumbnailPrompts;
+    try {
+        const text = cleanJSON(promptGenResponse.text || "{}");
+        const json = JSON.parse(text);
+        prompts = {
+            visual_description: json.visual_description,
+            clickbait_text: json.overlay_text || "WOW!",
+            suggested_assets: json.suggested_assets
+        };
+    } catch (e) {
+        console.error("Ideation JSON Parse Error:", e);
+        throw new Error("Failed to design thumbnail concept. The AI might be busy, please try again.");
+    }
     
-    // Step 2: Generation
-    setLoadingMessage("2/2: Generating thumbnail with your face...");
+    // Step 2: Generation - Creating the actual image
+    setLoadingMessage("2/2: Generating hyper-realistic thumbnail...");
 
-    const imagePrompt = `Generate a high-quality YouTube thumbnail.
-Scene Description: ${prompts.visual_description}.
-Important: The main character in the image MUST use the face of the person provided in the input image. Seamlessly blend the provided face onto the animated body described.
-Overlay Text: Add the text "${prompts.clickbait_text}" to the image. 
-Text Style: Use a ${fontStyle} font. Ensure it is huge, legible, and has high contrast (stroke/shadow) against the background.
-Aspect Ratio: ${aspectRatio}.
-Color Palette: ${paletteInstruction}
-Overall Style: ${generationStyle}. ${specificStylePrompt}
-Quality: High-quality, highly detailed, trending on ArtStation.`;
+    const imagePrompt = `You are generating a hyper-realistic YouTube thumbnail.
+    
+    STRICT GUIDELINES:
+    1. SUBJECT: IMAGE 1 is the main person. They must be the central character in the scene. Match their identity and expression perfectly.
+    2. ASSETS: ${brandAssets.length > 0 ? `The following images are logos or props provided by the user. Integrate them realistically into the scene.` : ""}
+    3. SCENE: ${prompts.visual_description}
+    4. TEXT: Add the text "${prompts.clickbait_text}" in a ${fontStyle} font. It must be massive, legible, and have extreme contrast (bright text with dark strokes/shadows).
+    5. QUALITY: ${specificStylePrompt} ${realismRequirement}
+    6. ASPECT RATIO: ${aspectRatio}
+    7. COLOR: ${paletteInstruction}
+
+    Output a single, complete, high-impact thumbnail image.`;
+
+    const parts = [
+        { inlineData: { data: faceImage.base64, mimeType: faceImage.mimeType } },
+        ...brandAssets.map(asset => ({ inlineData: { data: asset.base64, mimeType: asset.mimeType } })),
+        { text: imagePrompt }
+    ];
 
     const finalResponse = await ai.models.generateContent({
         model: 'gemini-2.5-flash-image',
         contents: {
-            parts: [
-                { inlineData: { data: faceImage.base64, mimeType: faceImage.mimeType } },
-                { text: imagePrompt }
-            ]
+            parts: parts
         },
         config: { 
-            responseModalities: [Modality.IMAGE],
             imageConfig: {
-                aspectRatio: aspectRatio
+                aspectRatio: aspectRatio as any
             }
         }
     });
 
-    const finalImagePart = finalResponse.candidates?.[0]?.content?.parts?.[0];
+    let finalImagePart = null;
+    let fallbackText = "";
+    
+    const candidates = finalResponse.candidates;
+    if (candidates && candidates.length > 0) {
+        const parts = candidates[0].content?.parts;
+        if (parts) {
+            for (const part of parts) {
+                if (part.inlineData) {
+                    finalImagePart = part;
+                    break;
+                }
+                if (part.text) {
+                    fallbackText += part.text + " ";
+                }
+            }
+        }
+    }
+
     if (!finalImagePart?.inlineData) {
-        throw new Error("Failed to generate thumbnail.");
+        const finishReason = candidates?.[0]?.finishReason;
+        
+        console.warn("Generation Issue Detected", { finishReason, fallbackText });
+
+        if (finishReason === 'SAFETY') {
+            throw new Error("Safety Block: The AI refused to generate this specific combination of images/text. Try a more neutral photo or avoiding brand names.");
+        }
+        
+        if (finishReason === 'IMAGE_OTHER' || finishReason === 'OTHER' || !finishReason) {
+             // Specific fix for the user's error: 
+             // Frame it as a technical limitation or a 'too complex' prompt refusal.
+             throw new Error("The model declined to generate this specific image. This often happens if the input face image is low quality, or if the scene description is too complex. Try a 'Professional' style or a clearer headshot.");
+        }
+
+        if (fallbackText) {
+             throw new Error(`Model Response: ${fallbackText.substring(0, 200)}`);
+        }
+        
+        throw new Error("Failed to generate thumbnail. Please check your inputs and try again.");
     }
 
     return `data:${finalImagePart.inlineData.mimeType};base64,${finalImagePart.inlineData.data}`;

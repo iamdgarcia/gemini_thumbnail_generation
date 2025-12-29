@@ -35,6 +35,12 @@ const PhotoIcon: React.FC<{ className?: string }> = ({ className }) => (
     </svg>
 );
 
+const TrashIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-4 h-4"}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+    </svg>
+);
+
 const DocumentTextIcon: React.FC<{ className?: string }> = ({ className }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-4 h-4"}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
@@ -143,6 +149,67 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageUpload, previewUrl
     );
 };
 
+interface BrandAssetUploaderProps {
+    assets: ImageFile[];
+    onAssetsChange: (assets: ImageFile[]) => void;
+}
+
+const BrandAssetUploader: React.FC<BrandAssetUploaderProps> = ({ assets, onAssetsChange }) => {
+    const handleFileChange = async (files: FileList | null) => {
+        if (files) {
+            const newAssets: ImageFile[] = [];
+            for (let i = 0; i < files.length; i++) {
+                const file = files[i];
+                if (assets.length + newAssets.length >= 2) break; // Limit to 2
+                try {
+                    const { base64, mimeType } = await fileToBase64(file);
+                    newAssets.push({ file, base64, mimeType });
+                } catch (error) {
+                    console.error("Error processing asset", error);
+                }
+            }
+            onAssetsChange([...assets, ...newAssets]);
+        }
+    };
+
+    const removeAsset = (index: number) => {
+        const updated = [...assets];
+        updated.splice(index, 1);
+        onAssetsChange(updated);
+    };
+
+    return (
+        <div className="w-full">
+            <label className="text-sm font-semibold text-gray-300 mb-2 flex items-center">
+                <span className="bg-gray-700 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center mr-2">3</span>
+                Brand Assets (Optional)
+            </label>
+            
+            <div className="flex gap-3 overflow-x-auto pb-2">
+                {assets.map((asset, idx) => (
+                    <div key={idx} className="relative w-20 h-20 shrink-0 rounded-lg border border-gray-700 overflow-hidden group">
+                        <img src={URL.createObjectURL(asset.file)} alt="Asset" className="w-full h-full object-cover bg-gray-800" />
+                        <button 
+                            onClick={() => removeAsset(idx)}
+                            className="absolute inset-0 bg-black/60 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white"
+                        >
+                            <TrashIcon />
+                        </button>
+                    </div>
+                ))}
+
+                {assets.length < 2 && (
+                    <label className="w-20 h-20 shrink-0 rounded-lg border-2 border-dashed border-gray-700 bg-gray-800/30 hover:bg-gray-800 hover:border-gray-500 cursor-pointer flex flex-col items-center justify-center text-gray-500 hover:text-gray-300 transition-all">
+                        <span className="text-2xl font-light">+</span>
+                        <span className="text-[10px] font-medium">Add Logo</span>
+                        <input type="file" multiple className="hidden" accept="image/png, image/jpeg, image/webp" onChange={(e) => handleFileChange(e.target.files)} />
+                    </label>
+                )}
+            </div>
+             <p className="text-xs text-gray-500 mt-1">Upload YouTube logo, product shot, etc. (Max 2)</p>
+        </div>
+    );
+};
 
 interface TextInputProps {
     label: string;
@@ -353,6 +420,7 @@ export default function App() {
     const [colorPalette, setColorPalette] = useState<Palette>(autoPalette);
     const [fontStyle, setFontStyle] = useState('Bold Sans-Serif');
     const [generationStyle, setGenerationStyle] = useState('Professional');
+    const [brandAssets, setBrandAssets] = useState<ImageFile[]>([]);
 
     const [isLoading, setIsLoading] = useState(false);
     const [loadingMessage, setLoadingMessage] = useState('');
@@ -386,6 +454,7 @@ export default function App() {
                 aspectRatio,
                 colorPalette.name === 'Auto' ? null : colorPalette,
                 fontStyle,
+                brandAssets.map(a => ({ base64: a.base64, mimeType: a.mimeType })),
                 setLoadingMessage
             );
             setGeneratedThumbnail(resultUrl);
@@ -510,10 +579,12 @@ export default function App() {
                                 )}
                             </div>
 
+                            <BrandAssetUploader assets={brandAssets} onAssetsChange={setBrandAssets} />
+
                             <div className="grid grid-cols-2 gap-4">
                                 <Dropdown 
                                     label="Expression"
-                                    step="3"
+                                    step="4"
                                     options={expressionOptions}
                                     selected={expression}
                                     onSelect={setExpression}
@@ -525,7 +596,7 @@ export default function App() {
                                 
                                 <Dropdown 
                                     label="Font Style"
-                                    step="4"
+                                    step="5"
                                     options={fontOptions}
                                     selected={fontStyle}
                                     onSelect={setFontStyle}
@@ -536,12 +607,12 @@ export default function App() {
                                 />
                             </div>
 
-                             <SegmentedControl label="Aspect Ratio" step="5" options={aspectRatioOptions} selected={aspectRatio} onSelect={setAspectRatio} />
+                             <SegmentedControl label="Aspect Ratio" step="6" options={aspectRatioOptions} selected={aspectRatio} onSelect={setAspectRatio} />
                             
                             <div className="grid grid-cols-2 gap-4">
                                 <Dropdown 
                                     label="Visual Style"
-                                    step="6"
+                                    step="7"
                                     options={generationStyles}
                                     selected={generationStyle}
                                     onSelect={setGenerationStyle}
@@ -553,7 +624,7 @@ export default function App() {
 
                                 <Dropdown 
                                     label="Color Palette"
-                                    step="7"
+                                    step="8"
                                     options={allPalettes}
                                     selected={colorPalette}
                                     onSelect={setColorPalette}
