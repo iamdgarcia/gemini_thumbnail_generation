@@ -1,7 +1,19 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import type { ImageFile } from './types';
 import { fileToBase64 } from './utils/fileUtils';
-import { generateThumbnail } from './services/geminiService';
+import { generateThumbnailSketch, refineThumbnailSketch, ThumbnailMetadata } from './services/geminiService';
+
+// --- Global AI Studio Helpers ---
+declare global {
+  interface AIStudio {
+    hasSelectedApiKey: () => Promise<boolean>;
+    openSelectKey: () => Promise<void>;
+  }
+
+  interface Window {
+    aistudio?: AIStudio;
+  }
+}
 
 // --- Icons ---
 
@@ -37,22 +49,27 @@ const PhotoIcon: React.FC<{ className?: string }> = ({ className }) => (
 
 const TrashIcon: React.FC<{ className?: string }> = ({ className }) => (
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-4 h-4"}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 0 1 3.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
     </svg>
 );
 
-const DocumentTextIcon: React.FC<{ className?: string }> = ({ className }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-4 h-4"}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z" />
+const ArrowPathIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-5 h-5"}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
     </svg>
 );
 
-const VideoCameraIcon: React.FC<{ className?: string }> = ({ className }) => (
-    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-4 h-4"}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 10.5l4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
+const AdjustIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-5 h-5"}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" />
     </svg>
 );
 
+const KeyIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className={className || "w-5 h-5"}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 5.25a3 3 0 0 1 3 3m3 0a6 6 0 0 1-7.029 5.912c-.563-.097-1.159.026-1.563.43L10.5 17.25H8.25v2.25H6v2.25H2.25v-2.818c0-.597.237-1.17.659-1.591l6.499-6.499c.404-.404.527-1 .43-1.563A6 6 0 1 1 21.75 8.25Z" />
+    </svg>
+);
 
 const Spinner: React.FC = () => (
     <svg className="animate-spin h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -108,7 +125,7 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageUpload, previewUrl
             <div className="flex justify-between items-center mb-2">
                 <label className="text-sm font-semibold text-gray-300 flex items-center">
                     <span className="bg-gray-700 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center mr-2">1</span>
-                    Face Image
+                    Your Face (Preserve Identity)
                 </label>
                 {previewUrl && <span className="text-xs text-blue-400 group-hover:underline cursor-pointer">Change image</span>}
             </div>
@@ -128,7 +145,7 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageUpload, previewUrl
                         <img src={previewUrl} alt="Preview" className="absolute inset-0 w-full h-full object-cover" />
                         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center backdrop-blur-sm">
                             <span className="text-white font-medium flex items-center gap-2">
-                                <PhotoIcon /> Replace Image
+                                <PhotoIcon /> Replace Face
                             </span>
                         </div>
                     </>
@@ -138,8 +155,8 @@ const ImageUploader: React.FC<ImageUploaderProps> = ({ onImageUpload, previewUrl
                             <UploadIcon />
                         </div>
                         <div className="space-y-1">
-                            <p className="font-medium text-gray-300">Click to upload or drag & drop</p>
-                            <p className="text-xs text-gray-500">PNG, JPG, WEBP (max 10MB)</p>
+                            <p className="font-medium text-gray-300">Upload identity reference</p>
+                            <p className="text-xs text-gray-500">Free, fast generation</p>
                         </div>
                     </div>
                 )}
@@ -160,7 +177,7 @@ const BrandAssetUploader: React.FC<BrandAssetUploaderProps> = ({ assets, onAsset
             const newAssets: ImageFile[] = [];
             for (let i = 0; i < files.length; i++) {
                 const file = files[i];
-                if (assets.length + newAssets.length >= 2) break; // Limit to 2
+                if (assets.length + newAssets.length >= 2) break;
                 try {
                     const { base64, mimeType } = await fileToBase64(file);
                     newAssets.push({ file, base64, mimeType });
@@ -182,7 +199,7 @@ const BrandAssetUploader: React.FC<BrandAssetUploaderProps> = ({ assets, onAsset
         <div className="w-full">
             <label className="text-sm font-semibold text-gray-300 mb-2 flex items-center">
                 <span className="bg-gray-700 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center mr-2">3</span>
-                Brand Assets (Optional)
+                Branding Assets
             </label>
             
             <div className="flex gap-3 overflow-x-auto pb-2">
@@ -206,7 +223,6 @@ const BrandAssetUploader: React.FC<BrandAssetUploaderProps> = ({ assets, onAsset
                     </label>
                 )}
             </div>
-             <p className="text-xs text-gray-500 mt-1">Upload YouTube logo, product shot, etc. (Max 2)</p>
         </div>
     );
 };
@@ -217,8 +233,9 @@ interface TextInputProps {
     value: string;
     onChange: (e: React.ChangeEvent<HTMLInputElement>) => void;
     placeholder: string;
+    variant?: 'default' | 'small';
 }
-const TextInput: React.FC<TextInputProps> = ({ label, step, value, onChange, placeholder }) => {
+const TextInput: React.FC<TextInputProps> = ({ label, step, value, onChange, placeholder, variant = 'default' }) => {
     return (
         <div className="w-full">
             <label className="text-sm font-semibold text-gray-300 mb-2 flex items-center">
@@ -231,43 +248,13 @@ const TextInput: React.FC<TextInputProps> = ({ label, step, value, onChange, pla
                     value={value}
                     onChange={onChange}
                     placeholder={placeholder}
-                    className="w-full px-4 py-3 bg-gray-900/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all"
+                    className={`w-full px-4 bg-gray-900/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all ${variant === 'small' ? 'py-2 text-sm' : 'py-3'}`}
                 />
-                <div className="absolute inset-0 rounded-xl ring-1 ring-white/5 pointer-events-none group-hover:ring-white/10"></div>
             </div>
         </div>
     );
 };
 
-interface TextAreaProps {
-    label: string;
-    step?: string;
-    value: string;
-    onChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
-    placeholder: string;
-}
-const TextArea: React.FC<TextAreaProps> = ({ label, step, value, onChange, placeholder }) => {
-    return (
-        <div className="w-full">
-             <label className="text-sm font-semibold text-gray-300 mb-2 flex items-center">
-                {step && <span className="bg-gray-700 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center mr-2">{step}</span>}
-                {label}
-            </label>
-            <div className="relative group">
-                <textarea
-                    value={value}
-                    onChange={onChange}
-                    placeholder={placeholder}
-                    rows={6}
-                    className="w-full px-4 py-3 bg-gray-900/50 border border-gray-700 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all resize-none"
-                />
-                <div className="absolute inset-0 rounded-xl ring-1 ring-white/5 pointer-events-none group-hover:ring-white/10"></div>
-            </div>
-        </div>
-    );
-}
-
-// Modern segmented control for aspect ratio
 const SegmentedControl = ({ options, selected, onSelect, label, step }: { options: { value: string, label: string }[], selected: string, onSelect: (val: string) => void, label: string, step: string }) => {
     return (
         <div className="w-full">
@@ -282,16 +269,9 @@ const SegmentedControl = ({ options, selected, onSelect, label, step }: { option
                         <button
                             key={opt.value}
                             onClick={() => onSelect(opt.value)}
-                            className={`relative py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
-                                isActive 
-                                ? 'bg-gray-700 text-white shadow-lg' 
-                                : 'text-gray-400 hover:text-white hover:bg-gray-800'
-                            }`}
+                            className={`relative py-2 rounded-lg text-sm font-medium transition-all duration-200 ${isActive ? 'bg-gray-700 text-white shadow-lg' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}
                         >
                             {opt.value}
-                            {isActive && (
-                                <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 w-1 h-1 bg-blue-400 rounded-full"></div>
-                            )}
                         </button>
                     )
                 })}
@@ -335,54 +315,24 @@ const Dropdown = <T,>({ label, step, options, selected, onSelect, renderOption, 
                 onClick={() => setIsOpen(!isOpen)}
                 className={`w-full px-4 py-3 bg-gray-900/50 border border-gray-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 text-left flex justify-between items-center transition-all hover:border-gray-600 ${isOpen ? 'ring-2 ring-blue-500/50 border-blue-500' : ''}`}
             >
-                <div className="flex-1 truncate flex items-center">
-                    {renderOption(selected)}
-                </div>
+                <div className="flex-1 truncate flex items-center">{renderOption(selected)}</div>
                 <ChevronDownIcon className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isOpen ? 'transform rotate-180' : ''}`} />
             </button>
-
             {isOpen && (
-                <div className="absolute z-30 mt-2 w-full bg-gray-800/95 backdrop-blur-xl border border-gray-700 rounded-xl shadow-2xl max-h-64 overflow-y-auto focus:outline-none overflow-hidden ring-1 ring-black/50">
-                    <div className="py-1">
-                    {options.map((option) => {
-                        const isSelected = keyExtractor(selected) === keyExtractor(option);
-                        return (
-                            <div
-                                key={keyExtractor(option)}
-                                onClick={() => {
-                                    onSelect(option);
-                                    setIsOpen(false);
-                                }}
-                                className={`cursor-pointer select-none relative py-2.5 pl-4 pr-4 hover:bg-blue-500/20 transition-colors ${isSelected ? 'bg-blue-500/10 text-blue-200 font-medium' : 'text-gray-300'}`}
-                            >
-                                <div className="flex items-center">
-                                    {renderOption(option)}
-                                    {isSelected && (
-                                        <span className="absolute right-4 flex items-center text-blue-400">
-                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4">
-                                                <path fillRule="evenodd" d="M16.704 4.153a.75.75 0 0 1 .143 1.052l-8 10.5a.75.75 0 0 1-1.127.075l-4.5-4.5a.75.75 0 0 1 1.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 0 1 1.05-.143Z" clipRule="evenodd" />
-                                            </svg>
-                                        </span>
-                                    )}
-                                </div>
-                            </div>
-                        );
-                    })}
-                    </div>
+                <div className="absolute z-30 mt-2 w-full bg-gray-800/95 backdrop-blur-xl border border-gray-700 rounded-xl shadow-2xl max-h-64 overflow-y-auto overflow-hidden">
+                    {options.map((option) => (
+                        <div
+                            key={keyExtractor(option)}
+                            onClick={() => { onSelect(option); setIsOpen(false); }}
+                            className={`cursor-pointer select-none relative py-2.5 pl-4 pr-4 hover:bg-blue-500/20 transition-colors ${keyExtractor(selected) === keyExtractor(option) ? 'bg-blue-500/10 text-blue-200' : 'text-gray-300'}`}
+                        >
+                            {renderOption(option)}
+                        </div>
+                    ))}
                 </div>
             )}
         </div>
     );
-};
-
-const getAspectRatioClass = (ratio: string): string => {
-    switch (ratio) {
-        case '16:9': return 'aspect-video';
-        case '9:16': return 'aspect-[9/16]';
-        case '4:3': return 'aspect-[4/3]';
-        case '1:1': return 'aspect-square';
-        default: return 'aspect-video';
-    }
 };
 
 interface Palette {
@@ -393,20 +343,12 @@ interface Palette {
 const palettes: Palette[] = [
     { name: 'YouTube', colors: ['#FF0000', '#FFFFFF', '#282828'] },
     { name: 'LinkedIn', colors: ['#0A66C2', '#FFFFFF', '#434649'] },
-    { name: 'Medium', colors: ['#000000', '#FFFFFF', '#A8A8A8'] },
-    { name: 'Substack', colors: ['#FF6719', '#FFFFFF', '#404040'] },
     { name: 'Vibrant', colors: ['#FF3E3E', '#FFC107', '#00D1FF', '#FFFFFF'] },
     { name: 'Neon', colors: ['#39FF14', '#FF40E3', '#00FFFF', '#FDFD96'] },
-    { name: 'Pastel', colors: ['#A0E7E5', '#F8C8DC', '#B4F8C8', '#FFAEBC'] },
-    { name: 'Dark Mode', colors: ['#0F172A', '#334155', '#94A3B8', '#F8FAFC'] },
-    { name: 'Earthy', colors: ['#A87B00', '#568203', '#4E2A04', '#C2B280'] },
-    { name: 'Sunset', colors: ['#F65B49', '#F9A825', '#FFD54F', '#4A148C'] },
     { name: 'Cyberpunk', colors: ['#FCEE0A', '#00F0FF', '#FF003C', '#120458'] }
 ];
 
 const autoPalette: Palette = { name: 'Auto', colors: [] };
-const expressionOptions = ['Auto', 'Shocked', 'Excited', 'Angry', 'Fearful', 'Sad', 'Serious', 'Confused', 'Triumphant', 'Suspicious'];
-const fontOptions = ['Bold Sans-Serif', 'Impact Style', 'Handwritten Marker', 'Futuristic', 'Retro', 'Comic/Cartoon', 'Minimalist'];
 const generationStyles = ['Professional', 'Casual', 'Cinematic', '3D Render', 'Comic Book', 'Retro'];
 
 export default function App() {
@@ -415,334 +357,266 @@ export default function App() {
     const [title, setTitle] = useState('');
     const [subtitle, setSubtitle] = useState('');
     const [articleText, setArticleText] = useState('');
-    const [expression, setExpression] = useState('Auto');
     const [aspectRatio, setAspectRatio] = useState('16:9');
     const [colorPalette, setColorPalette] = useState<Palette>(autoPalette);
-    const [fontStyle, setFontStyle] = useState('Bold Sans-Serif');
+    const [fontStyle, setFontStyle] = useState('Impact Style');
     const [generationStyle, setGenerationStyle] = useState('Professional');
     const [brandAssets, setBrandAssets] = useState<ImageFile[]>([]);
 
     const [isLoading, setIsLoading] = useState(false);
     const [loadingMessage, setLoadingMessage] = useState('');
     const [error, setError] = useState<string | null>(null);
-    const [generatedThumbnail, setGeneratedThumbnail] = useState<string | null>(null);
+    
+    // Two-step state
+    const [sketchImage, setSketchImage] = useState<string | null>(null);
+    const [sketchMetadata, setSketchMetadata] = useState<ThumbnailMetadata | null>(null);
+    const [finalImage, setFinalImage] = useState<string | null>(null);
 
-    const handleImageUpload = useCallback((imageFile: ImageFile) => {
-        setFaceImage(imageFile);
-    }, []);
+    const handleImageUpload = (imageFile: ImageFile) => setFaceImage(imageFile);
 
-    const handleSubmit = async () => {
+    const resetSteps = () => {
+        setSketchImage(null);
+        setSketchMetadata(null);
+        setFinalImage(null);
+    }
+
+    const handleGenerateSketch = async (isRegen = false) => {
         const hasContent = inputMode === 'title' ? !!title : !!articleText;
-
         if (!faceImage || !hasContent) {
-            setError("Please upload a face image and provide the video details or article content.");
+            setError("Missing face reference or content details.");
             return;
         }
 
         setIsLoading(true);
         setError(null);
-        setGeneratedThumbnail(null);
+        if (!isRegen) resetSteps();
 
         try {
-            const resultUrl = await generateThumbnail(
+            const { sketchUrl, metadata } = await generateThumbnailSketch(
                 { base64: faceImage.base64, mimeType: faceImage.mimeType },
                 inputMode === 'title' ? title : '',
                 inputMode === 'title' ? subtitle : '',
                 inputMode === 'article' ? articleText : '',
-                expression,
+                'Auto',
                 generationStyle,
                 aspectRatio,
-                colorPalette.name === 'Auto' ? null : colorPalette,
-                fontStyle,
                 brandAssets.map(a => ({ base64: a.base64, mimeType: a.mimeType })),
-                setLoadingMessage
+                setLoadingMessage,
+                isRegen ? sketchMetadata || undefined : undefined
             );
-            setGeneratedThumbnail(resultUrl);
+            setSketchImage(sketchUrl);
+            setSketchMetadata(metadata);
         } catch (e: any) {
-            console.error(e);
-            setError(e.message || "An unknown error occurred.");
+            setError(e.message || "Failed to strategize the layout.");
         } finally {
             setIsLoading(false);
             setLoadingMessage('');
         }
     };
+
+    const handleMetadataChange = (key: keyof ThumbnailMetadata, value: any) => {
+        if (!sketchMetadata) return;
+        setSketchMetadata({ ...sketchMetadata, [key]: value });
+    }
+
+    const handleFinalize = async () => {
+        if (!sketchImage || !sketchMetadata || !faceImage) return;
+
+        setIsLoading(true);
+        setError(null);
+
+        try {
+            const resultUrl = await refineThumbnailSketch(
+                sketchImage,
+                { base64: faceImage.base64, mimeType: faceImage.mimeType },
+                brandAssets.map(a => ({ base64: a.base64, mimeType: a.mimeType })),
+                sketchMetadata,
+                generationStyle,
+                aspectRatio,
+                colorPalette.name === 'Auto' ? null : colorPalette,
+                fontStyle,
+                setLoadingMessage
+            );
+            setFinalImage(resultUrl);
+        } catch (e: any) {
+            console.error("Masterpiece render failed", e);
+            setError(e.message || "Final render failed. Try a different image or prompt.");
+        } finally {
+            setIsLoading(false);
+            setLoadingMessage('');
+        }
+    }
     
     const handleDownload = () => {
-        if (generatedThumbnail) {
+        const img = finalImage || sketchImage;
+        if (img) {
             const link = document.createElement('a');
-            link.href = generatedThumbnail;
+            link.href = img;
             link.download = `thumbnail-${Date.now()}.png`;
-            document.body.appendChild(link);
             link.click();
-            document.body.removeChild(link);
         }
     };
 
     const canSubmit = faceImage && (inputMode === 'title' ? title : articleText) && !isLoading;
 
-    const aspectRatioOptions = [
-        { value: '16:9', label: 'Landscape' },
-        { value: '9:16', label: 'Portrait' },
-        { value: '4:3', label: 'Standard' },
-        { value: '1:1', label: 'Square' },
-    ];
-
-    const allPalettes = [autoPalette, ...palettes];
-
     return (
-        <div className="min-h-screen bg-[#0A0A0C] text-slate-200 font-sans selection:bg-blue-500/30 selection:text-blue-200">
-            <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
-                <div className="absolute -top-[20%] -left-[10%] w-[50%] h-[50%] rounded-full bg-blue-600/10 blur-[120px]"></div>
-                <div className="absolute top-[40%] -right-[10%] w-[40%] h-[40%] rounded-full bg-purple-600/10 blur-[100px]"></div>
-            </div>
-
-             <style>{`
-                @keyframes popIn {
-                    0% { opacity: 0; transform: scale(0.95) translateY(10px); filter: blur(8px); }
-                    100% { opacity: 1; transform: scale(1) translateY(0); filter: blur(0); }
-                }
-                @keyframes float {
-                    0%, 100% { transform: translateY(0); }
-                    50% { transform: translateY(-5px); }
-                }
-                @keyframes shimmer {
-                    0% { transform: translateX(-100%); }
-                    100% { transform: translateX(100%); }
-                }
-                .glass-panel {
-                    background: rgba(255, 255, 255, 0.03);
-                    backdrop-filter: blur(20px);
-                    -webkit-backdrop-filter: blur(20px);
-                    border: 1px solid rgba(255, 255, 255, 0.08);
-                }
-                .gradient-text {
-                     background: linear-gradient(135deg, #60A5FA 0%, #A855F7 100%);
-                     -webkit-background-clip: text;
-                     -webkit-text-fill-color: transparent;
-                }
+        <div className="min-h-screen bg-[#0A0A0C] text-slate-200 font-sans">
+            <style>{`
+                @keyframes popIn { 0% { opacity: 0; transform: scale(0.95); } 100% { opacity: 1; transform: scale(1); } }
+                .glass { background: rgba(255, 255, 255, 0.03); backdrop-filter: blur(20px); border: 1px solid rgba(255, 255, 255, 0.08); }
+                .gradient-text { background: linear-gradient(135deg, #60A5FA 0%, #A855F7 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
             `}</style>
             
             <main className="relative z-10 container mx-auto px-4 py-12 max-w-6xl">
                 <header className="flex flex-col items-center mb-16">
-                    <div className="inline-flex items-center space-x-2 bg-white/5 rounded-full px-4 py-1.5 border border-white/10 mb-6">
-                        <SparklesIcon className="w-4 h-4 text-yellow-400" />
-                        <span className="text-xs font-medium tracking-wide uppercase text-gray-300">Powered by Gemini 2.5</span>
-                    </div>
-                    <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-center mb-6">
-                        <span className="gradient-text">Viral Thumbnails</span> <br/>
-                        <span className="text-white">in Seconds.</span>
+                    <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-center mb-4">
+                        <span className="gradient-text">Thumbnail</span> <span className="text-white">Gen</span>
                     </h1>
-                    <p className="text-lg text-gray-400 max-w-xl text-center leading-relaxed">
-                        Create click-worthy, high-engagement thumbnails tailored to your content using advanced generative AI.
+                    <p className="text-gray-400 max-w-xl text-center leading-relaxed">
+                        Anchor your face in a strategic layout, then render a photorealistic thumbnail. Fast, free, and identity-preserved.
                     </p>
                 </header>
 
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-                    
-                    {/* Left Column: Controls */}
                     <div className="lg:col-span-5 space-y-6">
-                        <div className="glass-panel p-6 md:p-8 rounded-3xl space-y-8 shadow-2xl shadow-black/50">
-                            
-                            <ImageUploader onImageUpload={handleImageUpload} previewUrl={faceImage ? URL.createObjectURL(faceImage.file) : undefined} />
-                            
-                            <div className="space-y-4">
-                                <label className="text-sm font-semibold text-gray-300 flex items-center mb-2">
-                                     <span className="bg-gray-700 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center mr-2">2</span>
-                                     Content Source
-                                </label>
-                                <div className="bg-gray-900/50 p-1 rounded-xl border border-gray-700 grid grid-cols-2 gap-1 mb-4">
-                                    <button
-                                        onClick={() => setInputMode('title')}
-                                        className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${inputMode === 'title' ? 'bg-gray-700 text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}
-                                    >
-                                        <VideoCameraIcon />
-                                        Video Title
-                                    </button>
-                                    <button
-                                        onClick={() => setInputMode('article')}
-                                        className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${inputMode === 'article' ? 'bg-gray-700 text-white shadow-md' : 'text-gray-400 hover:text-white hover:bg-gray-800'}`}
-                                    >
-                                        <DocumentTextIcon />
-                                        Article Text
+                        <div className="glass p-6 md:p-8 rounded-3xl space-y-8 shadow-2xl">
+                            {!sketchImage ? (
+                                <>
+                                    <ImageUploader onImageUpload={handleImageUpload} previewUrl={faceImage ? URL.createObjectURL(faceImage.file) : undefined} />
+                                    <div className="space-y-4">
+                                        <div className="bg-gray-900/50 p-1 rounded-xl border border-gray-700 grid grid-cols-2 gap-1 mb-4">
+                                            <button onClick={() => setInputMode('title')} className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${inputMode === 'title' ? 'bg-gray-700 text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}>Quick Hook</button>
+                                            <button onClick={() => setInputMode('article')} className={`flex items-center justify-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all ${inputMode === 'article' ? 'bg-gray-700 text-white shadow-lg' : 'text-gray-400 hover:text-white'}`}>Full Script</button>
+                                        </div>
+                                        {inputMode === 'title' ? (
+                                            <div className="space-y-4">
+                                                <TextInput label="Target Title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Title text hook..." />
+                                                <TextInput label="Subtext" value={subtitle} onChange={(e) => setSubtitle(e.target.value)} placeholder="Extra hook details..." />
+                                            </div>
+                                        ) : (
+                                            <textarea value={articleText} onChange={(e) => setArticleText(e.target.value)} placeholder="Paste your article or script..." rows={6} className="w-full px-4 py-3 bg-gray-900/50 border border-gray-700 rounded-xl text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50" />
+                                        )}
+                                    </div>
+                                    <BrandAssetUploader assets={brandAssets} onAssetsChange={setBrandAssets} />
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <Dropdown label="Style" options={generationStyles} selected={generationStyle} onSelect={setGenerationStyle} keyExtractor={o => o} renderOption={o => <span>{o}</span>} />
+                                        <SegmentedControl label="Aspect Ratio" step="5" options={[{value: '16:9', label: 'YT'}, {value: '9:16', label: 'Short'}, {value: '1:1', label: 'Sq'}, {value: '4:3', label: 'Sd'}]} selected={aspectRatio} onSelect={setAspectRatio} />
+                                    </div>
+                                </>
+                            ) : (
+                                <div className="space-y-6 animate-[popIn_0.3s_ease-out]">
+                                    <div className="flex items-center justify-between">
+                                        <h3 className="text-xl font-bold flex items-center gap-2"><AdjustIcon className="text-blue-400" /> Plan Refinement</h3>
+                                        <button onClick={resetSteps} className="text-xs text-gray-500 hover:text-red-400 transition-colors">Restart</button>
+                                    </div>
+                                    
+                                    <div className="space-y-5">
+                                        <TextInput variant="small" label="Impact Text" value={sketchMetadata?.clickbait_text || ''} onChange={(e) => handleMetadataChange('clickbait_text', e.target.value)} placeholder="Text on thumbnail..." />
+                                        <TextInput variant="small" label="Action Pose" value={sketchMetadata?.visual_description || ''} onChange={(e) => handleMetadataChange('visual_description', e.target.value)} placeholder="Describe the action..." />
+                                        
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-semibold text-gray-400">Remarkable Hooks</label>
+                                            <div className="flex flex-wrap gap-2">
+                                                {sketchMetadata?.visual_hooks.map((h, i) => (
+                                                    <div key={i} className="flex items-center gap-2 bg-blue-900/40 border border-blue-500/30 px-3 py-1 rounded-full text-xs text-blue-100">
+                                                        <span>{h}</span>
+                                                        <button onClick={() => handleMetadataChange('visual_hooks', sketchMetadata.visual_hooks.filter((_, idx) => idx !== i))} className="text-blue-400 hover:text-red-400">×</button>
+                                                    </div>
+                                                ))}
+                                                <button onClick={() => { const h = prompt("Add visual hook:"); if(h) handleMetadataChange('visual_hooks', [...(sketchMetadata?.visual_hooks || []), h]) }} className="px-3 py-1 rounded-full border border-gray-700 text-xs hover:bg-gray-800 text-gray-400">+</button>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-semibold text-gray-400">Props</label>
+                                            <div className="flex flex-wrap gap-2">
+                                                {sketchMetadata?.props.map((p, i) => (
+                                                    <div key={i} className="flex items-center gap-2 bg-gray-800 px-3 py-1 rounded-full text-xs">
+                                                        <span>{p}</span>
+                                                        <button onClick={() => handleMetadataChange('props', sketchMetadata.props.filter((_, idx) => idx !== i))} className="text-gray-500 hover:text-red-400">×</button>
+                                                    </div>
+                                                ))}
+                                                <button onClick={() => { const p = prompt("Add prop:"); if(p) handleMetadataChange('props', [...(sketchMetadata?.props || []), p]) }} className="px-3 py-1 rounded-full border border-gray-700 text-xs hover:bg-gray-800">+</button>
+                                            </div>
+                                        </div>
+
+                                        <div className="space-y-2">
+                                            <label className="text-xs font-semibold text-gray-400">Background</label>
+                                            <textarea value={sketchMetadata?.background_context || ''} onChange={(e) => handleMetadataChange('background_context', e.target.value)} className="w-full text-sm bg-gray-900/50 border border-gray-700 rounded-xl p-3 focus:outline-none min-h-[80px]" />
+                                        </div>
+
+                                        <div className="grid grid-cols-2 gap-4">
+                                            <Dropdown label="Final Style" options={generationStyles} selected={generationStyle} onSelect={setGenerationStyle} keyExtractor={o => o} renderOption={o => <span>{o}</span>} />
+                                            <Dropdown label="Palette" options={[autoPalette, ...palettes]} selected={colorPalette} onSelect={setColorPalette} keyExtractor={p => p.name} renderOption={p => <span>{p.name}</span>} />
+                                        </div>
+                                    </div>
+
+                                    <button onClick={() => handleGenerateSketch(true)} className="w-full py-3 bg-gray-800 border border-gray-700 rounded-xl text-sm font-bold hover:bg-gray-700 transition-colors flex items-center justify-center gap-2">
+                                        <ArrowPathIcon className="w-4 h-4" /> Re-sync Blueprint
                                     </button>
                                 </div>
+                            )}
 
-                                {inputMode === 'title' ? (
-                                    <div className="space-y-5 animate-[popIn_0.3s_ease-out]">
-                                        <TextInput label="Video Title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g., I Built a Secret Base..." />
-                                        <TextInput label="Subtitle (Optional)" value={subtitle} onChange={(e) => setSubtitle(e.target.value)} placeholder="e.g., You won't believe this!" />
-                                    </div>
-                                ) : (
-                                    <div className="animate-[popIn_0.3s_ease-out]">
-                                         <TextArea label="Article Content" value={articleText} onChange={(e) => setArticleText(e.target.value)} placeholder="Paste your article or script here..." />
-                                    </div>
-                                )}
-                            </div>
-
-                            <BrandAssetUploader assets={brandAssets} onAssetsChange={setBrandAssets} />
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <Dropdown 
-                                    label="Expression"
-                                    step="4"
-                                    options={expressionOptions}
-                                    selected={expression}
-                                    onSelect={setExpression}
-                                    keyExtractor={(opt) => opt}
-                                    renderOption={(opt) => (
-                                        <span className="font-medium">{opt}</span>
-                                    )}
-                                />
-                                
-                                <Dropdown 
-                                    label="Font Style"
-                                    step="5"
-                                    options={fontOptions}
-                                    selected={fontStyle}
-                                    onSelect={setFontStyle}
-                                    keyExtractor={(opt) => opt}
-                                    renderOption={(opt) => (
-                                        <span className="truncate">{opt}</span>
-                                    )}
-                                />
-                            </div>
-
-                             <SegmentedControl label="Aspect Ratio" step="6" options={aspectRatioOptions} selected={aspectRatio} onSelect={setAspectRatio} />
-                            
-                            <div className="grid grid-cols-2 gap-4">
-                                <Dropdown 
-                                    label="Visual Style"
-                                    step="7"
-                                    options={generationStyles}
-                                    selected={generationStyle}
-                                    onSelect={setGenerationStyle}
-                                    keyExtractor={(opt) => opt}
-                                    renderOption={(opt) => (
-                                        <span className="font-medium">{opt}</span>
-                                    )}
-                                />
-
-                                <Dropdown 
-                                    label="Color Palette"
-                                    step="8"
-                                    options={allPalettes}
-                                    selected={colorPalette}
-                                    onSelect={setColorPalette}
-                                    keyExtractor={(p) => p.name}
-                                    renderOption={(palette) => (
-                                        <div className="flex items-center justify-between w-full group">
-                                            <span className="font-medium flex items-center gap-2 truncate">
-                                                {palette.name === 'Auto' && <SparklesIcon className="w-4 h-4 text-purple-400" />}
-                                                {palette.name}
-                                            </span>
-                                            {palette.colors.length > 0 && (
-                                                <div className="flex -space-x-2 shrink-0">
-                                                    {palette.colors.slice(0, 3).map((color, i) => (
-                                                        <div key={i} className="w-5 h-5 rounded-full ring-2 ring-gray-800 shadow-sm" style={{ backgroundColor: color }}></div>
-                                                    ))}
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                />
-                            </div>
-
-                            <button
-                                onClick={handleSubmit}
-                                disabled={!canSubmit}
-                                className={`group relative w-full inline-flex items-center justify-center px-8 py-4 text-lg font-bold rounded-2xl text-white transition-all duration-300 transform hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-blue-500/20 overflow-hidden ${
-                                    canSubmit 
-                                        ? 'bg-gradient-to-r from-blue-600 to-purple-600 hover:shadow-purple-500/40' 
-                                        : 'bg-gray-800/50 text-gray-500 cursor-not-allowed border border-gray-700'
-                                }`}
-                            >
-                                {isLoading && (
-                                    <div className="absolute inset-0 bg-white/10 z-10 animate-[shimmer_2s_infinite]"></div>
-                                )}
-                                <span className="relative z-20 flex items-center gap-3">
+                            <div className="space-y-3">
+                                <button onClick={() => sketchImage ? handleFinalize() : handleGenerateSketch()} disabled={!canSubmit} className={`w-full py-4 text-lg font-bold rounded-2xl text-white transition-all transform hover:scale-[1.02] active:scale-[0.98] ${canSubmit ? 'bg-gradient-to-r from-blue-600 to-indigo-600 shadow-xl shadow-blue-500/20' : 'bg-gray-800/50 text-gray-500 cursor-not-allowed'}`}>
                                     {isLoading ? (
-                                        <>
-                                            <Spinner />
-                                            <span>Generating Magic...</span>
-                                        </>
+                                        <span className="flex items-center justify-center gap-3"><Spinner /> {loadingMessage || 'Generating...'}</span>
                                     ) : (
-                                        <>
-                                            <SparklesIcon className="w-6 h-6 text-yellow-200 animate-[float_3s_ease-in-out_infinite]" />
-                                            Generate Thumbnail
-                                        </>
+                                        <span className="flex items-center justify-center gap-3">
+                                            {sketchImage ? <SparklesIcon /> : <ArrowPathIcon />} 
+                                            {sketchImage ? "Generate Final Image" : "Create Layout Plan"}
+                                        </span>
                                     )}
-                                </span>
-                            </button>
+                                </button>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Right Column: Result */}
                     <div className="lg:col-span-7 lg:sticky lg:top-8 space-y-6">
-                        <div className={`glass-panel rounded-3xl p-2 transition-all duration-500 relative overflow-hidden group ${!generatedThumbnail && !isLoading ? 'bg-gray-900/30 border-dashed border-2 border-gray-700' : 'bg-black/40 shadow-2xl shadow-black/50'}`}>
-                             {/* Aspect Ratio Wrapper */}
-                            <div className={`relative w-full rounded-2xl overflow-hidden bg-black/20 flex items-center justify-center transition-all duration-500 ${getAspectRatioClass(aspectRatio)}`}>
-                                
-                                {error && (
-                                    <div className="text-center text-red-400 p-8 max-w-md">
-                                        <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
-                                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" />
-                                            </svg>
-                                        </div>
-                                        <h3 className="font-bold text-xl mb-2">Generation Failed</h3>
-                                        <p className="text-sm text-red-300/80 leading-relaxed">{error}</p>
+                        <div className={`glass rounded-3xl p-2 min-h-[440px] flex items-center justify-center transition-all ${!sketchImage && !isLoading ? 'border-dashed border-2 border-gray-800' : 'bg-black/40 shadow-2xl'}`}>
+                            {isLoading ? (
+                                <div className="text-center p-12">
+                                    <div className="w-20 h-20 mx-auto mb-6 relative"><div className="absolute inset-0 border-4 border-blue-500 rounded-full border-t-transparent animate-spin"></div></div>
+                                    <p className="text-2xl font-bold animate-pulse text-white">{loadingMessage}</p>
+                                </div>
+                            ) : error ? (
+                                <div className="text-center p-12 text-red-400 max-w-sm">
+                                    <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+                                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8"><path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9 3.75h.008v.008H12v-.008Z" /></svg>
                                     </div>
-                                )}
-
-                                {isLoading && (
-                                    <div className="text-center p-8 z-20">
-                                        <div className="relative w-20 h-20 mx-auto mb-6">
-                                            <div className="absolute inset-0 border-4 border-gray-700 rounded-full"></div>
-                                            <div className="absolute inset-0 border-4 border-blue-500 rounded-full border-t-transparent animate-spin"></div>
-                                        </div>
-                                        <p className="text-2xl font-bold text-white mb-2 animate-pulse">{loadingMessage}</p>
-                                        <p className="text-sm text-gray-400">AI is brainstorming & designing...</p>
+                                    <p className="font-bold text-lg mb-2">Error Occurred</p>
+                                    <p className="text-sm opacity-80 leading-relaxed">{error}</p>
+                                    <button onClick={() => setError(null)} className="mt-6 px-4 py-2 bg-gray-800 rounded-lg text-xs font-medium hover:bg-gray-700">Dismiss</button>
+                                </div>
+                            ) : finalImage ? (
+                                <div className="w-full h-full animate-[popIn_0.8s_cubic-bezier(0.16,1,0.3,1)]">
+                                    <img src={finalImage} alt="Final Thumbnail" className="w-full rounded-2xl shadow-inner border border-white/5" />
+                                    <div className="mt-4 flex flex-col sm:flex-row gap-3 justify-between items-center px-2">
+                                        <button onClick={resetSteps} className="text-gray-500 text-xs hover:text-white transition-colors">Start New</button>
+                                        <button onClick={handleDownload} className="w-full sm:w-auto bg-blue-600 px-8 py-3 rounded-xl font-bold flex items-center justify-center gap-2 hover:bg-blue-500 transition-all transform hover:-translate-y-1 shadow-lg shadow-blue-500/20"><DownloadIcon /> Download Image</button>
                                     </div>
-                                )}
-
-                                {!isLoading && !generatedThumbnail && !error && (
-                                    <div className="text-center text-gray-600">
-                                        <div className="w-24 h-24 bg-gray-800/50 rounded-full flex items-center justify-center mx-auto mb-6">
-                                            <SparklesIcon className="w-10 h-10 text-gray-700" />
-                                        </div>
-                                        <p className="text-xl font-medium text-gray-500">Preview Area</p>
-                                        <p className="text-sm text-gray-600 mt-2">Your masterpiece will appear here</p>
+                                </div>
+                            ) : sketchImage ? (
+                                <div className="w-full h-full relative group p-6">
+                                    <div className="absolute top-4 left-4 z-20 px-3 py-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-full text-[10px] font-bold uppercase tracking-wider">Layout Blueprint</div>
+                                    <div className="bg-gray-900 rounded-2xl overflow-hidden shadow-2xl border border-white/10">
+                                        <img src={sketchImage} alt="Strategic Draft" className="w-full opacity-100" />
                                     </div>
-                                )}
-
-                                {generatedThumbnail && (
-                                    <img 
-                                        src={generatedThumbnail} 
-                                        alt="Generated Thumbnail" 
-                                        className="w-full h-full object-contain"
-                                        style={{ animation: 'popIn 0.8s cubic-bezier(0.16, 1, 0.3, 1)' }}
-                                    />
-                                )}
-                            </div>
-                            
-                            {generatedThumbnail && (
-                                <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/90 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex justify-end">
-                                    <span className="text-white/70 text-xs font-mono bg-black/50 px-2 py-1 rounded">Generated by Gemini</span>
+                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/40 backdrop-blur-[2px]">
+                                        <div className="bg-black/80 px-4 py-2 rounded-xl border border-white/10 flex items-center gap-2">
+                                            <SparklesIcon className="text-blue-400" />
+                                            <p className="font-medium text-white text-sm">Hooks Identified. Polisher ready.</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="text-center text-gray-700">
+                                    <SparklesIcon className="w-16 h-16 mx-auto mb-4 opacity-10" />
+                                    <p className="font-medium opacity-30 text-lg">Viral Strategy Blueprint</p>
+                                    <p className="text-xs opacity-20 mt-1 max-w-[200px] mx-auto">Upload a photo to see the AI identify hooks and remarkable elements for your content.</p>
                                 </div>
                             )}
                         </div>
-
-                        {generatedThumbnail && (
-                            <div className="flex justify-end animate-[popIn_0.5s_ease-out_0.2s_both]">
-                                <button
-                                    onClick={handleDownload}
-                                    className="inline-flex items-center justify-center px-8 py-4 rounded-xl shadow-lg text-white font-bold bg-green-600 hover:bg-green-500 transition-all transform hover:-translate-y-1 hover:shadow-green-500/30 ring-1 ring-white/10"
-                                >
-                                    <DownloadIcon className="w-5 h-5 mr-2" />
-                                    Download Image
-                                </button>
-                            </div>
-                        )}
                     </div>
                 </div>
             </main>
