@@ -98,7 +98,7 @@ Respond ONLY with JSON:
     The individual from the reference photo (IMAGE 1) should be the central figure in this pose: ${previousMetadata!.visual_description}.
     
     Layout Details:
-    - Use the actual face of the person from IMAGE 1 for the subject's head.
+    - Capture the head and facial features of the person from IMAGE 1 realistically in the layout.
     - Render the rest of the scene as a clean, simple black-and-white ink sketch.
     - Include clear outlines for: ${previousMetadata!.visual_hooks.join(', ')}.
     - Set the scene in: ${previousMetadata!.background_context}.
@@ -145,7 +145,7 @@ Respond ONLY with JSON:
 };
 
 /**
- * STEP 2: Refines the layout into a high-quality masterpiece with strict identity preservation.
+ * STEP 2: Refines the layout into a high-quality masterpiece.
  */
 export const refineThumbnailSketch = async (
     sketchUrl: string,
@@ -166,37 +166,43 @@ export const refineThumbnailSketch = async (
         'Cinematic': "epic cinematic film still, moody rim lighting, deep contrast.",
         '3D Render': "high-detail 3D digital render, realistic materials, octane render style.",
         'Comic Book': "vibrant digital illustration, dynamic linework, high-contrast colors.",
-        'Retro': "vintage film photograph, warm film grain, nostalgic lighting."
+        'Retro': "vintage film photograph, warm film grain, nostalgic lighting.",
+        'Hyper-Realistic': "ultra-realistic 8k masterwork photograph, hyper-realistic skin textures, pore-level detail, masterfully lit cinematic environment with perfect depth of field."
     };
 
     const specificStylePrompt = stylePromptMap[generationStyle] || stylePromptMap['Professional'];
+    const isHyper = generationStyle === 'Hyper-Realistic';
 
     const paletteInstruction = colorPalette
         ? `Use a color scheme inspired by ${colorPalette.name} (${colorPalette.colors.join(', ')}).`
         : "Use vibrant, high-contrast, attention-grabbing colors.";
 
-    setLoadingMessage("Rendering final masterpiece...");
+    setLoadingMessage("Rendering masterpiece draft...");
 
     const sketchBase64 = sketchUrl.split(',')[1];
     const sketchMimeType = sketchUrl.split(',')[0].split(':')[1].split(';')[0];
 
-    // Prompts revised to be softer but firm on identity to avoid IMAGE_OTHER
-    const finalPrompt = `Please generate a finished, high-quality professional thumbnail based on the layout in IMAGE 1.
+    const finalPrompt = `Produce a high-end professional thumbnail following the layout in IMAGE 1.
 
-The subject of the final image must be the exact same individual as shown in IMAGE 2. Please carefully preserve their facial features, likeness, and appearance to maintain a realistic and authentic identity. They should look like a real person in a high-quality photograph.
+CRITICAL IDENTITY REQUIREMENT: 
+The subject MUST be the exact individual from IMAGE 2. 
+- 100% LIKENESS: Transfer every unique facial feature, nose shape, eyes, and bone structure from IMAGE 2.
+- COLORIZATION: If IMAGE 2 is black and white, you MUST realistically colorize the face to match a natural human skin tone integrated with the scene's lighting.
+- REALISM: The person must look like a 100% real human, not an illustration (unless the style is Comic Book).
 
-Instructions:
-1. Scene: Transform the sketches from IMAGE 1 into fully realized, realistic details. 
-2. Setting: The background should be a detailed ${metadata.background_context} featuring these hooks: ${metadata.visual_hooks.join(', ')}.
-3. Text: Include the headline "${metadata.clickbait_text}" in a bold, striking ${fontStyle}.
+${isHyper ? 'HYPER-REALISM MODE: Both the human and the environment MUST be indistinguishable from reality, using master-level photographic clarity.' : ''}
+
+Specs:
+1. Composition: Follow IMAGE 1 precisely.
+2. Scene: Detailed ${metadata.background_context} with ${metadata.visual_hooks.join(', ')}.
+3. Text: Overlay "${metadata.clickbait_text}" in bold ${fontStyle}.
 4. Style: ${specificStylePrompt}.
-5. Integration: Use professional studio lighting to naturally integrate the person from IMAGE 2 into the rendered scene.
 
-The final result should be a sharp, engaging, and professional composition.`;
+Integrate the person from IMAGE 2 into this world with flawless photographic blending.`;
 
     const finalParts = [
-        { inlineData: { data: sketchBase64, mimeType: sketchMimeType } }, // IMAGE 1: Blueprint
-        { inlineData: { data: faceImage.base64, mimeType: faceImage.mimeType } }, // IMAGE 2: Face Reference
+        { inlineData: { data: sketchBase64, mimeType: sketchMimeType } }, // Blueprint
+        { inlineData: { data: faceImage.base64, mimeType: faceImage.mimeType } }, // Identity Reference
         ...brandAssets.map(asset => ({ inlineData: { data: asset.base64, mimeType: asset.mimeType } })),
         { text: finalPrompt }
     ];
@@ -205,11 +211,7 @@ The final result should be a sharp, engaging, and professional composition.`;
         const finalResponse = await ai.models.generateContent({
             model: DEFAULT_IMAGE_MODEL,
             contents: { parts: finalParts },
-            config: { 
-                imageConfig: { 
-                    aspectRatio: aspectRatio as any
-                }
-            }
+            config: { imageConfig: { aspectRatio: aspectRatio as any } }
         });
 
         let finalImagePart = null;
@@ -221,25 +223,78 @@ The final result should be a sharp, engaging, and professional composition.`;
                     break;
                 }
             }
-
-            if (!finalImagePart) {
-                if (candidate.finishReason === 'SAFETY') {
-                    throw new Error("The image content was flagged by safety filters. Try adjusting your title or using a different image.");
-                }
-                throw new Error(`The image engine could not complete the request (Reason: ${candidate.finishReason}).`);
-            }
+            if (!finalImagePart) throw new Error("No image generated.");
         } else {
-            throw new Error("The image service returned an empty response.");
+            throw new Error("Empty service response.");
         }
 
         return `data:${finalImagePart.inlineData.mimeType};base64,${finalImagePart.inlineData.data}`;
     } catch (error: any) {
-        console.error("Polishing Error:", error);
-        
-        if (error.message?.includes("OTHER")) {
-            throw new Error("The final render failed due to a temporary engine error. This often happens with overly complex text or lighting instructions. Try a simpler title or a different style like 'Cinematic' or 'Casual'.");
+        if (error.message?.includes("OTHER")) throw new Error("The image engine failed. Try a simpler title.");
+        throw error;
+    }
+};
+
+/**
+ * STEP 3: Reflection & Self-Correction Step.
+ * Critiques the masterpiece and performs a final perfection pass.
+ */
+export const reflectAndRefineMasterpiece = async (
+    masterpieceUrl: string,
+    originalFaceImage: { base64: string; mimeType: string },
+    metadata: ThumbnailMetadata,
+    generationStyle: string,
+    aspectRatio: string,
+    setLoadingMessage: (message: string) => void
+): Promise<string> => {
+    const ai = getAIClient();
+    setLoadingMessage("Critiquing likeness and polishing realism...");
+
+    const masterpieceBase64 = masterpieceUrl.split(',')[1];
+    const masterpieceMimeType = masterpieceUrl.split(',')[0].split(':')[1].split(';')[0];
+
+    const reflectionPrompt = `Perform a CRITICAL REFLECTION and SELF-CORRECTION on the masterpiece (IMAGE 1).
+
+Compare IMAGE 1 (The Masterpiece) to IMAGE 2 (The Original Identity Reference).
+
+Critique Tasks:
+1. IDENTITY FIDELITY: Does the subject in IMAGE 1 look exactly like the person in IMAGE 2? Correct any deviations in facial structure, features, or likeness.
+2. COLOURIZATION CHECK: If IMAGE 2 was black and white, ensure the face in the final result is realistically colorized and perfectly skin-toned to match a high-end photograph.
+3. REALISM: Ensure the subject and environment are 100% realistic and indistinguishable from professional photography. Remove any "AI-looking" artifacts or smoothing.
+4. TEXTURE: Add micro-details to the skin, hair, and clothing to reach hyper-realistic quality.
+
+Final Instruction:
+Generate the PERFECTED final version of the thumbnail. Maintain the exact composition of IMAGE 1 but fix the face to be a 100% realistic and faithful replica of the person in IMAGE 2. Both the human and the environment must be hyper-realistic.`;
+
+    const correctionParts = [
+        { inlineData: { data: masterpieceBase64, mimeType: masterpieceMimeType } }, // The current masterpiece
+        { inlineData: { data: originalFaceImage.base64, mimeType: originalFaceImage.mimeType } }, // The original face reference
+        { text: reflectionPrompt }
+    ];
+
+    try {
+        const finalResponse = await ai.models.generateContent({
+            model: DEFAULT_IMAGE_MODEL,
+            contents: { parts: correctionParts },
+            config: { imageConfig: { aspectRatio: aspectRatio as any } }
+        });
+
+        let perfectedImagePart = null;
+        if (finalResponse.candidates && finalResponse.candidates.length > 0) {
+            const candidate = finalResponse.candidates[0];
+            for (const part of candidate.content?.parts || []) {
+                if (part.inlineData) {
+                    perfectedImagePart = part;
+                    break;
+                }
+            }
+            if (!perfectedImagePart) throw new Error("No image generated during reflection.");
         }
 
-        throw error;
+        return `data:${perfectedImagePart!.inlineData.mimeType};base64,${perfectedImagePart!.inlineData.data}`;
+    } catch (error: any) {
+        console.error("Reflection Error:", error);
+        // Fallback to masterpiece if reflection fails
+        return masterpieceUrl;
     }
 };

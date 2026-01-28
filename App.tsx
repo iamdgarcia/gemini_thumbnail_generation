@@ -1,7 +1,7 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import type { ImageFile } from './types';
 import { fileToBase64 } from './utils/fileUtils';
-import { generateThumbnailSketch, refineThumbnailSketch, ThumbnailMetadata } from './services/geminiService';
+import { generateThumbnailSketch, refineThumbnailSketch, reflectAndRefineMasterpiece, ThumbnailMetadata } from './services/geminiService';
 
 // --- Global AI Studio Helpers ---
 declare global {
@@ -349,7 +349,7 @@ const palettes: Palette[] = [
 ];
 
 const autoPalette: Palette = { name: 'Auto', colors: [] };
-const generationStyles = ['Professional', 'Casual', 'Cinematic', '3D Render', 'Comic Book', 'Retro'];
+const generationStyles = ['Professional', 'Casual', 'Cinematic', '3D Render', 'Comic Book', 'Retro', 'Hyper-Realistic'];
 
 export default function App() {
     const [faceImage, setFaceImage] = useState<ImageFile | null>(null);
@@ -426,7 +426,8 @@ export default function App() {
         setError(null);
 
         try {
-            const resultUrl = await refineThumbnailSketch(
+            // First refine to masterpiece
+            const draftUrl = await refineThumbnailSketch(
                 sketchImage,
                 { base64: faceImage.base64, mimeType: faceImage.mimeType },
                 brandAssets.map(a => ({ base64: a.base64, mimeType: a.mimeType })),
@@ -437,7 +438,18 @@ export default function App() {
                 fontStyle,
                 setLoadingMessage
             );
-            setFinalImage(resultUrl);
+
+            // Reflection and Self-Correction Step
+            const perfectedUrl = await reflectAndRefineMasterpiece(
+                draftUrl,
+                { base64: faceImage.base64, mimeType: faceImage.mimeType },
+                sketchMetadata,
+                generationStyle,
+                aspectRatio,
+                setLoadingMessage
+            );
+
+            setFinalImage(perfectedUrl);
         } catch (e: any) {
             console.error("Masterpiece render failed", e);
             setError(e.message || "Final render failed. Try a different image or prompt.");
